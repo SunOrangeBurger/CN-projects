@@ -32,8 +32,8 @@
         
         {% if is_host %}
         <div style="text-align: center; margin-top: 30px;">
-            <button class="btn" onclick="nextQuestion()">Next Question</button>
-            <button class="btn btn-secondary" onclick="endQuiz()" style="margin-left: 10px;">End Quiz</button>
+            <button class="btn btn-secondary" onclick="endQuiz()">End Quiz for All</button>
+            <p style="margin-top: 10px; font-size: 14px;">Users progress independently through questions</p>
         </div>
         {% endif %}
     </div>
@@ -94,10 +94,25 @@ socket.on('quiz_started', function(data) {
     document.getElementById('waitingArea').style.display = 'none';
     document.getElementById('quizArea').style.display = 'block';
     
+    if (!isHost) {
+        // Request first question
+        socket.emit('get_question', {room: roomCode});
+    }
+});
+
+socket.on('question_data', function(data) {
     currentQuestion = data.question;
     questionStartTime = Date.now();
     displayQuestion(data.question);
     startTimer(data.question.timeLimit);
+});
+
+socket.on('user_finished', function(data) {
+    document.getElementById('quizArea').style.display = 'none';
+    document.getElementById('leaderboardArea').style.display = 'block';
+    
+    // Request final leaderboard
+    socket.emit('get_leaderboard', {room: roomCode});
 });
 
 socket.on('answer_submitted', function(data) {
@@ -109,6 +124,10 @@ socket.on('answer_submitted', function(data) {
 socket.on('quiz_ended', function(data) {
     document.getElementById('quizArea').style.display = 'none';
     document.getElementById('leaderboardArea').style.display = 'block';
+    displayLeaderboard(data.leaderboard);
+});
+
+socket.on('leaderboard_data', function(data) {
     displayLeaderboard(data.leaderboard);
 });
 
@@ -188,6 +207,12 @@ function displayQuestion(question) {
 
 function submitAnswer(answer) {
     const responseTime = Date.now() - questionStartTime;
+    
+    // Clear timer
+    if (timerInterval) {
+        clearInterval(timerInterval);
+    }
+    
     socket.emit('submit_answer', {
         room: roomCode,
         answer: answer,
@@ -197,7 +222,7 @@ function submitAnswer(answer) {
     
     if (!isHost) {
         const optionsDiv = document.getElementById('answerOptions');
-        optionsDiv.innerHTML = '<p style="text-align: center; color: var(--neon-red);">Answer submitted! Waiting for next question...</p>';
+        optionsDiv.innerHTML = '<p style="text-align: center; color: var(--neon-red);">Answer submitted! Loading next question...</p>';
     }
 }
 
@@ -207,12 +232,19 @@ function startTimer(seconds) {
     
     if (timerInterval) clearInterval(timerInterval);
     
+    timerEl.textContent = timeLeft;
+    
     timerInterval = setInterval(() => {
         timeLeft--;
         timerEl.textContent = timeLeft;
         
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
+            
+            // Auto-submit empty answer when time runs out
+            if (!isHost) {
+                submitAnswer('');
+            }
         }
     }, 1000);
 }
@@ -222,7 +254,7 @@ function nextQuestion() {
 }
 
 function endQuiz() {
-    if (confirm('Are you sure you want to end the quiz?')) {
+    if (confirm('Are you sure you want to end the quiz for all participants?')) {
         socket.emit('end_quiz', {room: roomCode});
     }
 }
@@ -239,8 +271,11 @@ function displayLeaderboard(leaderboard) {
         else if (index === 1) div.classList.add('top-2');
         else if (index === 2) div.classList.add('top-3');
         
+        const finishedBadge = entry.finished !== undefined && !entry.finished ? 
+            ' <span style="color: #ffa500;">(In Progress)</span>' : '';
+        
         div.innerHTML = `
-            <span>${index + 1}. ${entry.username}</span>
+            <span>${index + 1}. ${entry.username}${finishedBadge}</span>
             <span>Score: ${entry.score} | Avg Latency: ${entry.avg_latency}ms</span>
         `;
         container.appendChild(div);

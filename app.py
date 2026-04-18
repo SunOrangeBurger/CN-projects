@@ -146,13 +146,10 @@ def start_quiz(data):
         return
     
     room.status = 'active'
-    room.current_question = 0
     db.session.commit()
     
-    quiz = db.session.get(Quiz, room.quiz_id)
-    questions = quiz.get_questions()
-    
-    emit('quiz_started', {'question': questions[0], 'index': 0, 'total': len(questions)}, room=room_code)
+    # Notify all participants that quiz has started
+    emit('quiz_started', {}, room=room_code)
 
 @socketio.on('submit_answer')
 def submit_answer(data):
@@ -167,16 +164,26 @@ def submit_answer(data):
     if room.host_id == current_user.id:
         return
     
+    participant = Participant.query.filter_by(room_id=room.id, user_id=current_user.id).first()
+    
+    if not participant:
+        return
+    
     quiz = db.session.get(Quiz, room.quiz_id)
     questions = quiz.get_questions()
-    current_q = questions[room.current_question]
+    
+    # Make sure user is answering their current question
+    if participant.current_question >= len(questions):
+        return
+    
+    current_q = questions[participant.current_question]
     
     is_correct = str(answer_text).strip().lower() == str(current_q['correct']).strip().lower()
     
     answer = Answer(
         room_id=room.id,
         user_id=current_user.id,
-        question_index=room.current_question,
+        question_index=participant.current_question,
         answer=answer_text,
         latency=latency,
         is_correct=is_correct
@@ -184,36 +191,88 @@ def submit_answer(data):
     db.session.add(answer)
     
     if is_correct:
-        participant = Participant.query.filter_by(room_id=room.id, user_id=current_user.id).first()
-        if participant:
-            participant.score += 1
+        participant.score += 1
+    
+    # Move user to next question
+    participant.current_question += 1
     
     db.session.commit()
     
-    emit('answer_submitted', {'username': current_user.username}, room=room_code)
+    # Notify host of answer submission
+    emit('answer_submitted', {
+        'username': current_user.username,
+        'question_index': participant.current_question - 1
+    }, room=room_code)
+    
+    # Check if user finished all questions
+    if participant.current_question >= len(questions):
+        participant.finished = True
+        db.session.commit()
+        emit('user_finished', {})
+    else:
+        # Send next question to this user only
+        next_question = questions[participant.current_question]
+        emit('question_data', {
+            'question': next_question,
+            'index': participant.current_question,
+            'total': len(questions)
+        })
 
-@socketio.on('next_question')
-def next_question(data):
+@socketio.on('get_question')
+def get_question(data):
     room_code = data['room']
     room = Room.query.filter_by(code=room_code).first()
     
-    if room.host_id != current_user.id:
+    # Don't send questions to host
+    if room.host_id == current_user.id:
+        return
+    
+    participant = Participant.query.filter_by(room_id=room.id, user_id=current_user.id).first()
+    
+    if not participant:
         return
     
     quiz = db.session.get(Quiz, room.quiz_id)
     questions = quiz.get_questions()
     
-    room.current_question += 1
-    db.session.commit()
+    # Check if user has finished all questions
+    if participant.current_question >= len(questions):
+        participant.finished = True
+        db.session.commit()
+        emit('user_finished', {})
+        return
     
-    if room.current_question < len(questions):
-        emit('quiz_started', {
-            'question': questions[room.current_question],
-            'index': room.current_question,
-            'total': len(questions)
-        }, room=room_code)
-    else:
-        end_quiz({'room': room_code})
+    # Send the user's current question
+    question = questions[participant.current_question]
+    emit('question_data', {
+        'question': question,
+        'index': participant.current_question,
+        'total': len(questions)
+    })
+
+@socketio.on('get_leaderboard')
+def get_leaderboard(data):
+    room_code = data['room']
+    room = Room.query.filter_by(code=room_code).first()
+    
+    participants = Participant.query.filter_by(room_id=room.id).all()
+    leaderboard = []
+    
+    for p in participants:
+        user = db.session.get(User, p.user_id)
+        answers = Answer.query.filter_by(room_id=room.id, user_id=p.user_id).all()
+        avg_latency = sum(a.latency for a in answers) / len(answers) if answers else 0
+        
+        leaderboard.append({
+            'username': user.username,
+            'score': p.score,
+            'avg_latency': round(avg_latency, 2),
+            'finished': p.finished
+        })
+    
+    leaderboard.sort(key=lambda x: (-x['score'], x['avg_latency']))
+    
+    emit('leaderboard_data', {'leaderboard': leaderboard})
 
 @socketio.on('end_quiz')
 def end_quiz(data):

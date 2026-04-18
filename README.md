@@ -8,9 +8,10 @@ A real-time multiplayer quiz platform built with Flask, Socket.IO, and SQLite.
 - Create custom quizzes with MCQ, True/False, and text questions
 - Host quiz rooms with shareable codes
 - Real-time quiz gameplay with WebSocket support
-- Latency tracking and monitoring for hosts
+- Network latency tracking with ping-pong measurement
 - Live leaderboard with tiebreaker based on latency-adjusted time
 - Neon red and gunmetal grey themed UI
+- Admin/host monitoring dashboard with latency graphs
 
 ## Setup Instructions
 
@@ -49,6 +50,24 @@ ngrok http 5000
 6. **Monitor**: Hosts can view latency graphs and individual participant latencies
 7. **Results**: View final leaderboard with scores and average latencies
 
+## Load Testing
+
+Two load test scripts are provided:
+
+### Simple Load Test
+Tests basic endpoints and measures response times:
+```bash
+python simple_load_test.py
+```
+
+### Full Load Test
+Simulates multiple concurrent users joining and playing a quiz:
+```bash
+python load_test.py
+```
+
+Edit the `NUM_USERS` variable in `load_test.py` to adjust the number of simulated users (default: 20).
+
 ## Database
 
 The app uses SQLite (`quiz.db`) which is created automatically on first run.
@@ -60,9 +79,18 @@ The app uses SQLite (`quiz.db`) which is created automatically on first run.
 - Database: SQLite
 - Real-time: WebSocket via Socket.IO
 
+## Architecture
+
+- **Host/Admin**: Creates quizzes, opens rooms, controls quiz flow, monitors latency
+- **Participants**: Join rooms, answer questions in real-time
+- **Latency Measurement**: Ping-pong protocol measures actual network latency (not response time)
+- **Scoring**: Correct answers earn points, ties broken by average latency
+
 ## Notes
 
 - Rooms are locked once the quiz starts
+- Hosts cannot answer questions (admin role only)
 - Scoring is based on correct answers
-- Tiebreakers use latency-adjusted response time
-- Hosts can monitor real-time latency data
+- Tiebreakers use network latency measurements
+- Latency is measured every 2 seconds via ping-pong
+- Real-time updates via WebSocket ensure synchronized gameplay

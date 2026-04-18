@@ -38,6 +38,8 @@ class Participant(db.Model):
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     score = db.Column(db.Integer, default=0)
+    current_question = db.Column(db.Integer, default=0)
+    finished = db.Column(db.Boolean, default=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Answer(db.Model):
