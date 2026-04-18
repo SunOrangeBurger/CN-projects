@@ -60,11 +60,24 @@
 <script>
 const socket = io();
 const roomCode = '{{ room.code }}';
-const isHost = {% if is_host %}true{% else %}false{% endif %};
+const isHost = {{ is_host|tojson }};
 const roomStatus = '{{ room.status }}';
 let currentQuestion = null;
 let timerInterval = null;
 let questionStartTime = null;
+let currentLatency = 0;
+
+// Measure network latency with ping-pong
+function measureLatency() {
+    const start = Date.now();
+    socket.emit('ping', {}, function() {
+        currentLatency = Date.now() - start;
+    });
+}
+
+// Measure latency every 2 seconds
+setInterval(measureLatency, 2000);
+measureLatency();
 
 // Set initial display state
 if (roomStatus !== 'waiting') {
@@ -174,14 +187,18 @@ function displayQuestion(question) {
 }
 
 function submitAnswer(answer) {
-    const latency = Date.now() - questionStartTime;
+    const responseTime = Date.now() - questionStartTime;
     socket.emit('submit_answer', {
         room: roomCode,
         answer: answer,
-        latency: latency
+        latency: currentLatency,
+        responseTime: responseTime
     });
     
-    document.getElementById('answerOptions').innerHTML = '<p style="text-align: center; color: var(--neon-red);">Answer submitted! Waiting for next question...</p>';
+    if (!isHost) {
+        const optionsDiv = document.getElementById('answerOptions');
+        optionsDiv.innerHTML = '<p style="text-align: center; color: var(--neon-red);">Answer submitted! Waiting for next question...</p>';
+    }
 }
 
 function startTimer(seconds) {

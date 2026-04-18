@@ -132,6 +132,11 @@ def on_join(data):
     
     emit('user_joined', {'username': current_user.username, 'participants': participant_list}, room=room_code)
 
+@socketio.on('ping')
+def handle_ping(data):
+    # Simply acknowledge the ping for latency measurement
+    return True
+
 @socketio.on('start_quiz')
 def start_quiz(data):
     room_code = data['room']
@@ -153,7 +158,8 @@ def start_quiz(data):
 def submit_answer(data):
     room_code = data['room']
     answer_text = data['answer']
-    latency = data['latency']
+    latency = data.get('latency', 0)
+    response_time = data.get('responseTime', 0)
     
     room = Room.query.filter_by(code=room_code).first()
     
