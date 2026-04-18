@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Quiz Network{% endblock %}
+
+{% block content %}
+<h2 style="color: var(--neon-red); margin-top: 20px;">Dashboard</h2>
+
+<div class="card">
+    <h3>Your Quizzes</h3>
+    <a href="{{ url_for('create_quiz') }}" class="btn">Create New Quiz</a>
+    
+    <div class="quiz-list">
+        {% for quiz in quizzes %}
+        <div class="quiz-item">
+            <h3>{{ quiz.title }}</h3>
+            <p>Created: {{ quiz.created_at.strftime('%Y-%m-%d') }}</p>
+            <a href="{{ url_for('create_room', quiz_id=quiz.id) }}" class="btn">Open Room</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h3>Active Rooms</h3>
+    {% if rooms %}
+    <div class="quiz-list">
+        {% for room in rooms %}
+        <div class="quiz-item">
+            <h3>Room Code: {{ room.code }}</h3>
+            <p>Status: {{ room.status }}</p>
+            <a href="{{ url_for('room', code=room.code) }}" class="btn">Enter Room</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>No active rooms</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Join a Room</h3>
+    <form action="/room/" method="GET" onsubmit="event.preventDefault(); window.location.href='/room/' + document.getElementById('room_code').value;">
+        <div class="form-group">
+            <label for="room_code">Enter Room Code</label>
+            <input type="text" id="room_code" name="code" placeholder="Enter 6-character code" required>
+        </div>
+        <button type="submit" class="btn">Join Room</button>
+    </form>
+</div>
+{% endblock %}

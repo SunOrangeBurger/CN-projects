@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Room {{ room.code }} - Quiz Network{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="color: var(--neon-red);">{{ quiz.title }}</h2>
+    <div class="room-code">{{ room.code }}</div>
+    <p style="text-align: center;">Share this code with participants</p>
+    
+    <div id="waitingArea">
+        <h3>Participants</h3>
+        <ul class="participants-list" id="participantsList"></ul>
+        
+        {% if is_host %}
+        <button class="btn" onclick="startQuiz()" style="width: 100%; margin-top: 20px;">Start Quiz</button>
+        {% else %}
+        <p style="text-align: center; margin-top: 20px;">Waiting for host to start...</p>
+        {% endif %}
+    </div>
+    
+    <div id="quizArea" style="display: none;">
+        <div class="timer" id="timer">30</div>
+        <div class="question-container">
+            <div class="question-text" id="questionText"></div>
+            {% if not is_host %}
+            <div class="answer-options" id="answerOptions"></div>
+            {% else %}
+            <p style="text-align: center; color: var(--neon-red); margin-top: 30px;">You are the host - monitoring participants</p>
+            {% endif %}
+        </div>
+        
+        {% if is_host %}
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="btn" onclick="nextQuestion()">Next Question</button>
+            <button class="btn btn-secondary" onclick="endQuiz()" style="margin-left: 10px;">End Quiz</button>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div id="leaderboardArea" style="display: none;">
+        <h2 style="text-align: center; color: var(--neon-red); margin: 30px 0;">Final Results</h2>
+        <div class="leaderboard" id="leaderboard"></div>
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="{{ url_for('dashboard') }}" class="btn">Back to Dashboard</a>
+        </div>
+    </div>
+</div>
+
+{% if is_host %}
+<div class="card">
+    <h3 style="color: var(--neon-red);">Latency Monitor</h3>
+    <div class="latency-graph">
+        <h4>Average Latency: <span id="avgLatency">0</span> ms</h4>
+        <div class="latency-list" id="latencyList"></div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+const socket = io();
+const roomCode = '{{ room.code }}';
+const isHost = {% if is_host %}true{% else %}false{% endif %};
+const roomStatus = '{{ room.status }}';
+let currentQuestion = null;
+let timerInterval = null;
+let questionStartTime = null;
+
+// Set initial display state
+if (roomStatus !== 'waiting') {
+    document.getElementById('waitingArea').style.display = 'none';
+}
+
+socket.emit('join', {room: roomCode});
+
+socket.on('user_joined', function(data) {
+    updateParticipants(data.participants);
+});
+
+socket.on('quiz_started', function(data) {
+    document.getElementById('waitingArea').style.display = 'none';
+    document.getElementById('quizArea').style.display = 'block';
+    
+    currentQuestion = data.question;
+    questionStartTime = Date.now();
+    displayQuestion(data.question);
+    startTimer(data.question.timeLimit);
+});
+
+socket.on('answer_submitted', function(data) {
+    if (isHost) {
+        updateLatencyData();
+    }
+});
+
+socket.on('quiz_ended', function(data) {
+    document.getElementById('quizArea').style.display = 'none';
+    document.getElementById('leaderboardArea').style.display = 'block';
+    displayLeaderboard(data.leaderboard);
+});
+
+socket.on('latency_data', function(data) {
+    document.getElementById('avgLatency').textContent = data.avg;
+    
+    const list = document.getElementById('latencyList');
+    list.innerHTML = '';
+    
+    data.latencies.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'latency-item';
+        div.innerHTML = `
+            <span>${item.username}</span>
+            <span>${item.latency} ms (${item.timestamp})</span>
+        `;
+        list.appendChild(div);
+    });
+});
+
+function updateParticipants(participants) {
+    const list = document.getElementById('participantsList');
+    list.innerHTML = '';
+    
+    participants.forEach(p => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${p.username}</span><span>Score: ${p.score}</span>`;
+        list.appendChild(li);
+    });
+}
+
+function startQuiz() {
+    socket.emit('start_quiz', {room: roomCode});
+}
+
+function displayQuestion(question) {
+    document.getElementById('questionText').textContent = question.text;
+    
+    // Only show answer options for participants, not host
+    if (!isHost) {
+        const optionsDiv = document.getElementById('answerOptions');
+        optionsDiv.innerHTML = '';
+        
+        if (question.type === 'mcq') {
+            Object.entries(question.options).forEach(([key, value]) => {
+                const btn = document.createElement('button');
+                btn.className = 'answer-btn';
+                btn.textContent = `${key}. ${value}`;
+                btn.onclick = () => submitAnswer(key);
+                optionsDiv.appendChild(btn);
+            });
+        } else if (question.type === 'truefalse') {
+            ['True', 'False'].forEach(option => {
+                const btn = document.createElement('button');
+                btn.className = 'answer-btn';
+                btn.textContent = option;
+                btn.onclick = () => submitAnswer(option.toLowerCase());
+                optionsDiv.appendChild(btn);
+            });
+        } else {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-group';
+            input.placeholder = 'Type your answer';
+            input.style.marginBottom = '20px';
+            
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            btn.textContent = 'Submit';
+            btn.onclick = () => submitAnswer(input.value);
+            
+            optionsDiv.appendChild(input);
+            optionsDiv.appendChild(btn);
+        }
+    }
+}
+
+function submitAnswer(answer) {
+    const latency = Date.now() - questionStartTime;
+    socket.emit('submit_answer', {
+        room: roomCode,
+        answer: answer,
+        latency: latency
+    });
+    
+    document.getElementById('answerOptions').innerHTML = '<p style="text-align: center; color: var(--neon-red);">Answer submitted! Waiting for next question...</p>';
+}
+
+function startTimer(seconds) {
+    let timeLeft = seconds;
+    const timerEl = document.getElementById('timer');
+    
+    if (timerInterval) clearInterval(timerInterval);
+    
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        timerEl.textContent = timeLeft;
+        
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+        }
+    }, 1000);
+}
+
+function nextQuestion() {
+    socket.emit('next_question', {room: roomCode});
+}
+
+function endQuiz() {
+    if (confirm('Are you sure you want to end the quiz?')) {
+        socket.emit('end_quiz', {room: roomCode});
+    }
+}
+
+function displayLeaderboard(leaderboard) {
+    const container = document.getElementById('leaderboard');
+    container.innerHTML = '';
+    
+    leaderboard.forEach((entry, index) => {
+        const div = document.createElement('div');
+        div.className = 'leaderboard-item';
+        
+        if (index === 0) div.classList.add('top-1');
+        else if (index === 1) div.classList.add('top-2');
+        else if (index === 2) div.classList.add('top-3');
+        
+        div.innerHTML = `
+            <span>${index + 1}. ${entry.username}</span>
+            <span>Score: ${entry.score} | Avg Latency: ${entry.avg_latency}ms</span>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function updateLatencyData() {
+    socket.emit('get_latency_data', {room: roomCode});
+}
+
+if (isHost) {
+    setInterval(updateLatencyData, 2000);
+}
+</script>
+{% endblock %}

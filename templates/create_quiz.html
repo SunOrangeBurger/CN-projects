@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Create Quiz - Quiz Network{% endblock %}
+
+{% block content %}
+<h2 style="color: var(--neon-red); margin-top: 20px;">Create Quiz</h2>
+
+<div class="card">
+    <form id="quizForm" method="POST">
+        <div class="form-group">
+            <label for="title">Quiz Title</label>
+            <input type="text" id="title" name="title" required>
+        </div>
+        
+        <h3 style="color: var(--neon-red); margin: 20px 0;">Questions</h3>
+        <div id="questionsContainer"></div>
+        
+        <button type="button" class="btn" onclick="addQuestion()">Add Question</button>
+        <button type="submit" class="btn" style="margin-left: 10px;">Create Quiz</button>
+        <input type="hidden" name="questions" id="questionsData">
+    </form>
+</div>
+
+<script>
+let questions = [];
+
+function addQuestion() {
+    const questionDiv = document.createElement('div');
+    questionDiv.className = 'question-item';
+    questionDiv.innerHTML = `
+        <div class="form-group">
+            <label>Question Text</label>
+            <input type="text" class="question-text" required>
+        </div>
+        <div class="form-group">
+            <label>Question Type</label>
+            <select class="question-type" onchange="updateAnswerFields(this)">
+                <option value="mcq">Multiple Choice</option>
+                <option value="truefalse">True/False</option>
+                <option value="text">Text Answer</option>
+            </select>
+        </div>
+        <div class="answer-fields">
+            <div class="form-group">
+                <label>Option A</label>
+                <input type="text" class="option-a">
+            </div>
+            <div class="form-group">
+                <label>Option B</label>
+                <input type="text" class="option-b">
+            </div>
+            <div class="form-group">
+                <label>Option C</label>
+                <input type="text" class="option-c">
+            </div>
+            <div class="form-group">
+                <label>Option D</label>
+                <input type="text" class="option-d">
+            </div>
+            <div class="form-group">
+                <label>Correct Answer (A/B/C/D)</label>
+                <input type="text" class="correct-answer" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Time Limit (seconds)</label>
+            <input type="number" class="time-limit" value="30" min="5" required>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="removeQuestion(this)">Remove</button>
+    `;
+    document.getElementById('questionsContainer').appendChild(questionDiv);
+}
+
+function updateAnswerFields(select) {
+    const answerFields = select.closest('.question-item').querySelector('.answer-fields');
+    const type = select.value;
+    
+    if (type === 'truefalse') {
+        answerFields.innerHTML = `
+            <div class="form-group">
+                <label>Correct Answer</label>
+                <select class="correct-answer">
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                </select>
+            </div>
+        `;
+    } else if (type === 'text') {
+        answerFields.innerHTML = `
+            <div class="form-group">
+                <label>Correct Answer</label>
+                <input type="text" class="correct-answer" required>
+            </div>
+        `;
+    } else {
+        answerFields.innerHTML = `
+            <div class="form-group">
+                <label>Option A</label>
+                <input type="text" class="option-a">
+            </div>
+            <div class="form-group">
+                <label>Option B</label>
+                <input type="text" class="option-b">
+            </div>
+            <div class="form-group">
+                <label>Option C</label>
+                <input type="text" class="option-c">
+            </div>
+            <div class="form-group">
+                <label>Option D</label>
+                <input type="text" class="option-d">
+            </div>
+            <div class="form-group">
+                <label>Correct Answer (A/B/C/D)</label>
+                <input type="text" class="correct-answer" required>
+            </div>
+        `;
+    }
+}
+
+function removeQuestion(btn) {
+    btn.closest('.question-item').remove();
+}
+
+document.getElementById('quizForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const questionItems = document.querySelectorAll('.question-item');
+    questions = [];
+    
+    questionItems.forEach(item => {
+        const type = item.querySelector('.question-type').value;
+        const question = {
+            text: item.querySelector('.question-text').value,
+            type: type,
+            timeLimit: parseInt(item.querySelector('.time-limit').value),
+            correct: item.querySelector('.correct-answer').value
+        };
+        
+        if (type === 'mcq') {
+            question.options = {
+                A: item.querySelector('.option-a').value,
+                B: item.querySelector('.option-b').value,
+                C: item.querySelector('.option-c').value,
+                D: item.querySelector('.option-d').value
+            };
+        }
+        
+        questions.push(question);
+    });
+    
+    if (questions.length === 0) {
+        alert('Please add at least one question');
+        return;
+    }
+    
+    document.getElementById('questionsData').value = JSON.stringify(questions);
+    this.submit();
+});
+
+addQuestion();
+</script>
+{% endblock %}
