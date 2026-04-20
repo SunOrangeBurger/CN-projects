@@ -125,6 +125,17 @@ socket.on('quiz_ended', function(data) {
     document.getElementById('quizArea').style.display = 'none';
     document.getElementById('leaderboardArea').style.display = 'block';
     displayLeaderboard(data.leaderboard);
+    
+    if (isHost) {
+        // Show message that quiz auto-ended
+        const leaderboardArea = document.getElementById('leaderboardArea');
+        const msg = document.createElement('p');
+        msg.style.textAlign = 'center';
+        msg.style.color = 'var(--neon-red)';
+        msg.style.marginTop = '10px';
+        msg.textContent = 'Quiz ended automatically - all participants finished';
+        leaderboardArea.insertBefore(msg, leaderboardArea.firstChild);
+    }
 });
 
 socket.on('leaderboard_data', function(data) {

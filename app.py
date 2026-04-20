@@ -196,6 +196,10 @@ def submit_answer(data):
     # Move user to next question
     participant.current_question += 1
     
+    # Check if user finished all questions
+    if participant.current_question >= len(questions):
+        participant.finished = True
+    
     db.session.commit()
     
     # Notify host of answer submission
@@ -204,10 +208,36 @@ def submit_answer(data):
         'question_index': participant.current_question - 1
     }, room=room_code)
     
-    # Check if user finished all questions
-    if participant.current_question >= len(questions):
-        participant.finished = True
+    # Check if all participants have finished
+    all_participants = Participant.query.filter_by(room_id=room.id).all()
+    all_finished = all(p.finished for p in all_participants)
+    
+    if all_finished and len(all_participants) > 0:
+        # Auto-end quiz when all participants finish
+        room.status = 'finished'
         db.session.commit()
+        
+        # Generate final leaderboard
+        leaderboard = []
+        for p in all_participants:
+            user = db.session.get(User, p.user_id)
+            answers = Answer.query.filter_by(room_id=room.id, user_id=p.user_id).all()
+            avg_latency = sum(a.latency for a in answers) / len(answers) if answers else 0
+            
+            leaderboard.append({
+                'username': user.username,
+                'score': p.score,
+                'avg_latency': round(avg_latency, 2)
+            })
+        
+        leaderboard.sort(key=lambda x: (-x['score'], x['avg_latency']))
+        
+        # Send quiz ended event to all participants
+        emit('quiz_ended', {'leaderboard': leaderboard}, room=room_code)
+        return
+    
+    # If user finished but others haven't
+    if participant.finished:
         emit('user_finished', {})
     else:
         # Send next question to this user only
