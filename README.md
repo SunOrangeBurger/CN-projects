@@ -21,7 +21,15 @@ A real-time multiplayer quiz platform built with Flask, Socket.IO, and SQLite.
 pip install -r requirements.txt
 ```
 
-### 2. Run the Application
+### 2. Database Migration (if upgrading from older version)
+
+If you have an existing database, run the migration script:
+
+```bash
+python3 migrate_db.py
+```
+
+### 3. Run the Application
 
 ```bash
 python app.py
@@ -81,8 +89,10 @@ The app uses SQLite (`quiz.db`) which is created automatically on first run.
 
 ## Architecture
 
-- **Host/Admin**: Creates quizzes, opens rooms, controls quiz flow, monitors latency
-- **Participants**: Join rooms, answer questions in real-time
+- **Host/Admin**: Creates quizzes, opens rooms, controls quiz flow (start/end only), monitors latency
+- **Participants**: Join rooms, answer questions independently at their own pace
+- **Independent Progression**: Each user moves through questions individually, no waiting for others
+- **Auto-Advance**: Users automatically move to next question after answering or when time expires
 - **Latency Measurement**: Ping-pong protocol measures actual network latency (not response time)
 - **Scoring**: Correct answers earn points, ties broken by average latency
 
